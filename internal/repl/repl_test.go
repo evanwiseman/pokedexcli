@@ -1,10 +1,12 @@
-package main
+package repl
 
 import (
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/evanwiseman/pokedexcli/internal/pokeapi"
 )
 
 func TestCleanInput(t *testing.T) {
@@ -39,7 +41,7 @@ func TestCleanInput(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		actual := cleanInput(c.input)
+		actual := CleanInput(c.input)
 
 		if len(actual) != len(c.expected) {
 			t.Errorf("actual length=%v, expected length=%v", len(actual), len(c.expected))
@@ -58,7 +60,7 @@ func TestCleanInput(t *testing.T) {
 
 func TestCommandExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
-		if err := commandExit(); err != nil {
+		if err := CommandExit(CommandContext{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 			t.Fail()
 		}
@@ -87,9 +89,8 @@ func TestCommandExit(t *testing.T) {
 
 func TestCommandHelp(t *testing.T) {
 	if os.Getenv("TEST_HELP") == "1" {
-		if err := commandHelp(); err != nil {
+		if err := CommandHelp(CommandContext{}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
-			t.Fail()
 		}
 		return
 	}
@@ -104,4 +105,32 @@ func TestCommandHelp(t *testing.T) {
 	if !strings.Contains(string(output), "Usage") {
 		t.Errorf("expected 'Usage' in output, got: %q", string(output))
 	}
+}
+
+func TestCommandMap(t *testing.T) {
+	ctx := CommandContext{
+		LocationConfig: &pokeapi.Config{
+			Next:     strPtr(pokeapi.LocationAreasURL),
+			Previous: nil,
+		},
+	}
+
+	if os.Getenv("TEST_MAP") == "1" {
+		if err := CommandMap(ctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestCommandMap")
+	cmd.Env = append(os.Environ(), "TEST_MAP=1")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(string(output), "canalave-city-area") {
+		t.Errorf("expected 'canalave-city-area' in output, got: %q", string(output))
+	}
+
 }
