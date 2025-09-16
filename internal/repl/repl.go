@@ -13,76 +13,15 @@ func CleanInput(text string) []string {
 	return strings.Fields(strings.ToLower(text))
 }
 
-func CommandExit(ctx CommandContext) error {
-	fmt.Println("Closing the Pokedex... Goodbye!")
-	os.Exit(0)
-	return fmt.Errorf("error exiting program")
-}
-
-func CommandHelp(ctx CommandContext) error {
-	fmt.Println("Welcome to the Pokedex!")
-	fmt.Println("Usage:")
-	fmt.Println()
-
-	for _, v := range GetCommandRegistry() {
-		fmt.Printf("%v: %v\n", v.Name, v.Description)
-	}
-
-	return nil
-}
-
-func CommandMap(ctx CommandContext) error {
-	if ctx.LocationConfig.Next == nil {
-		return fmt.Errorf("you're on the last page")
-	}
-	url := *ctx.LocationConfig.Next
-	areas, err := pokeapi.GetLocationAreas(url)
-	if err != nil {
-		return err
-	}
-
-	ctx.LocationConfig.Next = areas.Next
-	ctx.LocationConfig.Previous = areas.Previous
-
-	for _, result := range areas.Results {
-		fmt.Printf("%s\n", result.Name)
-	}
-
-	return nil
-}
-
-func CommandMapb(ctx CommandContext) error {
-	if ctx.LocationConfig.Previous == nil {
-		return fmt.Errorf("you're on the first page")
-	}
-	url := *ctx.LocationConfig.Previous
-	areas, err := pokeapi.GetLocationAreas(url)
-	if err != nil {
-		return err
-	}
-
-	ctx.LocationConfig.Next = areas.Next
-	ctx.LocationConfig.Previous = areas.Previous
-
-	for _, result := range areas.Results {
-		fmt.Printf("%s\n", result.Name)
-	}
-
-	return nil
+type CommandContext struct {
+	Client         *pokeapi.Client
+	LocationConfig *pokeapi.Config
 }
 
 type CliCommand struct {
 	Name        string
 	Description string
 	Callback    func(ctx CommandContext) error
-}
-
-type CommandContext struct {
-	LocationConfig *pokeapi.Config
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func GetCommandRegistry() map[string]CliCommand {
@@ -110,9 +49,72 @@ func GetCommandRegistry() map[string]CliCommand {
 	}
 }
 
+func CommandExit(ctx CommandContext) error {
+	fmt.Println("Closing the Pokedex... Goodbye!")
+	os.Exit(0)
+	return fmt.Errorf("error exiting program")
+}
+
+func CommandHelp(ctx CommandContext) error {
+	fmt.Println("Welcome to the Pokedex!")
+	fmt.Println("Usage:")
+	fmt.Println()
+
+	for _, v := range GetCommandRegistry() {
+		fmt.Printf("%v: %v\n", v.Name, v.Description)
+	}
+
+	return nil
+}
+
+func CommandMap(ctx CommandContext) error {
+	if ctx.LocationConfig.Next == nil {
+		return fmt.Errorf("you're on the last page")
+	}
+	url := *ctx.LocationConfig.Next
+	areas, err := ctx.Client.GetLocationAreas(url)
+	if err != nil {
+		return err
+	}
+
+	ctx.LocationConfig.Next = areas.Next
+	ctx.LocationConfig.Previous = areas.Previous
+
+	for _, result := range areas.Results {
+		fmt.Printf("%s\n", result.Name)
+	}
+
+	return nil
+}
+
+func CommandMapb(ctx CommandContext) error {
+	if ctx.LocationConfig.Previous == nil {
+		return fmt.Errorf("you're on the first page")
+	}
+	url := *ctx.LocationConfig.Previous
+	areas, err := ctx.Client.GetLocationAreas(url)
+	if err != nil {
+		return err
+	}
+
+	ctx.LocationConfig.Next = areas.Next
+	ctx.LocationConfig.Previous = areas.Previous
+
+	for _, result := range areas.Results {
+		fmt.Printf("%s\n", result.Name)
+	}
+
+	return nil
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
 func Start() {
 	userInputScanner := bufio.NewScanner(os.Stdin)
 	ctx := CommandContext{
+		Client: pokeapi.NewClient(),
 		LocationConfig: &pokeapi.Config{
 			Next:     strPtr(pokeapi.LocationAreasURL),
 			Previous: nil,

@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
+
+	"github.com/evanwiseman/pokedexcli/internal/pokecache"
 )
 
 const (
@@ -26,22 +29,50 @@ type LocationAreas struct {
 	} `json:"results"`
 }
 
-func GetLocationAreas(url string) (LocationAreas, error) {
-	res, err := http.Get(url)
+type Client struct {
+	baseURL    string
+	httpClient *http.Client
+	cache      *pokecache.Cache
+}
+
+func NewClient() *Client {
+	return &Client{
+		baseURL:    BaseURL,
+		httpClient: &http.Client{},
+		cache:      pokecache.NewCache(5 * time.Second),
+	}
+}
+
+func (c *Client) FetchBytes(url string) ([]byte, error) {
+	bytes, ok := c.cache.Get(url)
+	if ok {
+		return bytes, nil
+	}
+
+	res, err := c.httpClient.Get(url)
 	if err != nil {
-		return LocationAreas{}, err
+		return nil, err
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return LocationAreas{}, err
+		return nil, err
+	}
+	c.cache.Add(url, body)
+	return body, nil
+}
+
+func (c *Client) GetLocationAreas(url string) (*LocationAreas, error) {
+	bytes, err := c.FetchBytes(url)
+	if err != nil {
+		return nil, err
 	}
 
 	var locationAreas LocationAreas
-	err = json.Unmarshal(body, &locationAreas)
+	err = json.Unmarshal(bytes, &locationAreas)
 	if err != nil {
-		return LocationAreas{}, err
+		return nil, err
 	}
-	return locationAreas, nil
+	return &locationAreas, nil
 }
