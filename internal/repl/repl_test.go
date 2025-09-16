@@ -1,6 +1,8 @@
 package repl
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -8,6 +10,12 @@ import (
 
 	"github.com/evanwiseman/pokedexcli/internal/pokeapi"
 )
+
+type funcStep struct {
+	fn             func(ctx *CommandContext, parameters []string) error
+	expectContains string
+	expectError    bool
+}
 
 func TestCleanInput(t *testing.T) {
 	cases := []struct {
@@ -60,7 +68,7 @@ func TestCleanInput(t *testing.T) {
 
 func TestCommandExit(t *testing.T) {
 	if os.Getenv("TEST_EXIT") == "1" {
-		if err := CommandExit(CommandContext{}); err != nil {
+		if err := CommandExit(nil, nil); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 			t.Fail()
 		}
@@ -89,7 +97,7 @@ func TestCommandExit(t *testing.T) {
 
 func TestCommandHelp(t *testing.T) {
 	if os.Getenv("TEST_HELP") == "1" {
-		if err := CommandHelp(CommandContext{}); err != nil {
+		if err := CommandHelp(nil, nil); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		return
@@ -107,30 +115,133 @@ func TestCommandHelp(t *testing.T) {
 	}
 }
 
-func TestCommandMap(t *testing.T) {
-	ctx := CommandContext{
-		LocationConfig: &pokeapi.Config{
-			Next:     strPtr(pokeapi.LocationAreasURL),
-			Previous: nil,
+func TestCommandMapMapb(t *testing.T) {
+	cases := []struct {
+		steps []funcStep
+	}{
+		{
+			steps: []funcStep{
+				{fn: CommandMap, expectContains: "canalave-city-area", expectError: false},
+				{fn: CommandMap, expectContains: "mt-coronet-1f-route-216", expectError: false},
+			},
+		},
+		{
+			steps: []funcStep{
+				{fn: CommandMap, expectContains: "canalave-city-area", expectError: false},
+				{fn: CommandMap, expectContains: "mt-coronet-1f-route-216", expectError: false},
+				{fn: CommandMapb, expectContains: "canalave-city-area", expectError: false},
+			},
+		},
+		{
+			steps: []funcStep{
+				{fn: CommandMapb, expectContains: "", expectError: true},
+			},
+		},
+		{
+			steps: []funcStep{
+				{fn: CommandMap, expectContains: "canalave-city-area", expectError: false},
+				{fn: CommandMapb, expectContains: "", expectError: true},
+			},
+		},
+	}
+	for _, c := range cases {
+		ctx := CommandContext{
+			Client: pokeapi.NewClient(),
+			LocationConfig: &pokeapi.Config{
+				Next:     strPtr(pokeapi.LocationAreaURL),
+				Previous: nil,
+			},
+		}
+		for _, step := range c.steps {
+			r, w, _ := os.Pipe()
+			old := os.Stdout
+			os.Stdout = w
+
+			err := step.fn(&ctx, nil)
+
+			w.Close()
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			os.Stdout = old
+
+			if step.expectError && err == nil {
+				t.Errorf("expected error but got nil")
+			} else if !step.expectError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if !strings.Contains(buf.String(), step.expectContains) {
+				t.Errorf("expected output to contain %s, got %s", step.expectContains, buf.String())
+			}
+		}
+	}
+}
+
+func TestCommandExplore(t *testing.T) {
+	cases := []struct {
+		steps []funcStep
+	}{
+		{
+			steps: []funcStep{
+				{
+					fn: func(ctx *CommandContext, _ []string) error {
+						return CommandExplore(ctx, []string{"canalave-city-area"})
+					},
+					expectContains: "staryu", // expect one Pokémon known in the area
+					expectError:    false,
+				},
+			},
+		},
+		{
+			steps: []funcStep{
+				{
+					fn: func(ctx *CommandContext, _ []string) error {
+						return CommandExplore(ctx, []string{}) // no parameter
+					},
+					expectContains: "",
+					expectError:    true,
+				},
+			},
+		},
+		{
+			steps: []funcStep{
+				{
+					fn: func(ctx *CommandContext, _ []string) error {
+						return CommandExplore(ctx, []string{"invalid-area"})
+					},
+					expectContains: "",
+					expectError:    true,
+				},
+			},
 		},
 	}
 
-	if os.Getenv("TEST_MAP") == "1" {
-		if err := CommandMap(ctx); err != nil {
-			t.Fatalf("unexpected error: %v", err)
+	for _, c := range cases {
+		ctx := CommandContext{
+			Client: pokeapi.NewClient(),
 		}
-		return
-	}
 
-	cmd := exec.Command(os.Args[0], "-test.run=TestCommandMap")
-	cmd.Env = append(os.Environ(), "TEST_MAP=1")
+		for _, step := range c.steps {
+			r, w, _ := os.Pipe()
+			old := os.Stdout
+			os.Stdout = w
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(string(output), "canalave-city-area") {
-		t.Errorf("expected 'canalave-city-area' in output, got: %q", string(output))
-	}
+			err := step.fn(&ctx, nil)
 
+			w.Close()
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			os.Stdout = old
+
+			if step.expectError && err == nil {
+				t.Errorf("expected error but got nil")
+			} else if !step.expectError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if step.expectContains != "" && !strings.Contains(buf.String(), step.expectContains) {
+				t.Errorf("expected output to contain %q, got %q", step.expectContains, buf.String())
+			}
+		}
+	}
 }

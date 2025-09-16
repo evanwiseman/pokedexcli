@@ -21,7 +21,7 @@ type CommandContext struct {
 type CliCommand struct {
 	Name        string
 	Description string
-	Callback    func(ctx CommandContext) error
+	Callback    func(ctx *CommandContext, parameters []string) error
 }
 
 func GetCommandRegistry() map[string]CliCommand {
@@ -46,16 +46,21 @@ func GetCommandRegistry() map[string]CliCommand {
 			Description: "Gets previous 20 map locations",
 			Callback:    CommandMapb,
 		},
+		"explore": {
+			Name:        "explore",
+			Description: "Explore an area, gets a list of all pokemon in the area",
+			Callback:    CommandExplore,
+		},
 	}
 }
 
-func CommandExit(ctx CommandContext) error {
+func CommandExit(ctx *CommandContext, parameters []string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return fmt.Errorf("error exiting program")
 }
 
-func CommandHelp(ctx CommandContext) error {
+func CommandHelp(ctx *CommandContext, parameters []string) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -67,12 +72,12 @@ func CommandHelp(ctx CommandContext) error {
 	return nil
 }
 
-func CommandMap(ctx CommandContext) error {
+func CommandMap(ctx *CommandContext, parameters []string) error {
 	if ctx.LocationConfig.Next == nil {
 		return fmt.Errorf("you're on the last page")
 	}
 	url := *ctx.LocationConfig.Next
-	areas, err := ctx.Client.GetLocationAreas(url)
+	areas, err := ctx.Client.GetLocationAreaList(url)
 	if err != nil {
 		return err
 	}
@@ -87,12 +92,12 @@ func CommandMap(ctx CommandContext) error {
 	return nil
 }
 
-func CommandMapb(ctx CommandContext) error {
+func CommandMapb(ctx *CommandContext, parameters []string) error {
 	if ctx.LocationConfig.Previous == nil {
 		return fmt.Errorf("you're on the first page")
 	}
 	url := *ctx.LocationConfig.Previous
-	areas, err := ctx.Client.GetLocationAreas(url)
+	areas, err := ctx.Client.GetLocationAreaList(url)
 	if err != nil {
 		return err
 	}
@@ -102,6 +107,21 @@ func CommandMapb(ctx CommandContext) error {
 
 	for _, result := range areas.Results {
 		fmt.Printf("%s\n", result.Name)
+	}
+
+	return nil
+}
+
+func CommandExplore(ctx *CommandContext, parameters []string) error {
+	if len(parameters) == 0 {
+		return fmt.Errorf("error no area provided")
+	}
+	area, err := ctx.Client.GetLocationArea(parameters[0])
+	if err != nil {
+		return err
+	}
+	for _, encounter := range area.PokemonEncounters {
+		fmt.Printf("%s\n", encounter.Pokemon.Name)
 	}
 
 	return nil
@@ -112,14 +132,14 @@ func strPtr(s string) *string {
 }
 
 func Start() {
-	userInputScanner := bufio.NewScanner(os.Stdin)
 	ctx := CommandContext{
 		Client: pokeapi.NewClient(),
 		LocationConfig: &pokeapi.Config{
-			Next:     strPtr(pokeapi.LocationAreasURL),
+			Next:     strPtr(pokeapi.LocationAreaURL),
 			Previous: nil,
 		},
 	}
+	userInputScanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("Pokedex > ")
 
@@ -132,6 +152,9 @@ func Start() {
 		// Get user input and parse into tokens
 		text := userInputScanner.Text()
 		tokens := CleanInput(text)
+		if len(tokens) == 0 {
+			continue
+		}
 
 		// Get command and perform command from registry
 		command := tokens[0]
@@ -140,7 +163,9 @@ func Start() {
 			fmt.Printf("error command '%s' not in registry\n", command)
 			continue
 		}
-		if err := cli.Callback(ctx); err != nil {
+
+		// Run the command with the current context
+		if err := cli.Callback(&ctx, tokens[1:]); err != nil {
 			fmt.Printf("error command failed %v\n", err)
 		}
 	}
