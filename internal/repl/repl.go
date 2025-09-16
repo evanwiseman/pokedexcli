@@ -3,6 +3,7 @@ package repl
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -50,6 +51,11 @@ func GetCommandRegistry() map[string]CliCommand {
 			Name:        "explore",
 			Description: "Explore an area, gets a list of all pokemon in the area",
 			Callback:    CommandExplore,
+		},
+		"catch": {
+			Name:        "catch",
+			Description: "Try to catch a pokemon.",
+			Callback:    CommandCatch,
 		},
 	}
 }
@@ -124,6 +130,34 @@ func CommandExplore(ctx *CommandContext, parameters []string) error {
 		fmt.Printf("%s\n", encounter.Pokemon.Name)
 	}
 
+	return nil
+}
+
+func CommandCatch(ctx *CommandContext, parameters []string) error {
+	if len(parameters) == 0 {
+		return fmt.Errorf("error no pokemon provided")
+	}
+	pokemon, err := ctx.Client.GetPokemon(parameters[0])
+	if err != nil {
+		return err
+	}
+
+	const maxBaseExp = 635
+
+	// calculate catch probability (between 0.1 and 0.9)
+	prob := 1.0 - float64(pokemon.BaseExperience)/float64(maxBaseExp) // higher baseExp = lower prob
+	if prob < 0.1 {
+		prob = 0.1
+	}
+	if prob > 0.9 {
+		prob = 0.9
+	}
+	fmt.Printf("Throwing a Pokeball at %v...\n", pokemon.Name)
+	if rand.Float64() < prob {
+		fmt.Printf("%v was caught!\n", pokemon.Name)
+	} else {
+		fmt.Printf("%v escaped!\n", pokemon.Name)
+	}
 	return nil
 }
 

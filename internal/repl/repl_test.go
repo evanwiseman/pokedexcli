@@ -245,3 +245,54 @@ func TestCommandExplore(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandCatch(t *testing.T) {
+	ctx := CommandContext{
+		Client: pokeapi.NewClient(),
+	}
+
+	cases := []struct {
+		parameters     []string
+		expectContains string
+		expectError    bool
+	}{
+		{
+			parameters:     []string{"pikachu"},
+			expectContains: "pikachu", // output should include the Pokémon name
+			expectError:    false,
+		},
+		{
+			parameters:     []string{},
+			expectContains: "",
+			expectError:    true, // no Pokémon name provided
+		},
+		{
+			parameters:     []string{"invalidpokemon"},
+			expectContains: "",
+			expectError:    true, // Pokémon does not exist
+		},
+	}
+
+	for _, c := range cases {
+		r, w, _ := os.Pipe()
+		old := os.Stdout
+		os.Stdout = w
+
+		err := CommandCatch(&ctx, c.parameters)
+
+		w.Close()
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		os.Stdout = old
+
+		if c.expectError && err == nil {
+			t.Errorf("expected error but got nil")
+		} else if !c.expectError && err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		if c.expectContains != "" && !strings.Contains(buf.String(), c.expectContains) {
+			t.Errorf("expected output to contain %q, got %q", c.expectContains, buf.String())
+		}
+	}
+}
