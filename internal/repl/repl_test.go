@@ -12,7 +12,7 @@ import (
 )
 
 type funcStep struct {
-	fn             func(ctx *CommandContext, parameters []string) error
+	fn             func(ctx *Context, parameters []string) error
 	expectContains string
 	expectError    bool
 }
@@ -145,7 +145,7 @@ func TestCommandMapMapb(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		ctx := CommandContext{
+		ctx := Context{
 			Client: pokeapi.NewClient(),
 			LocationConfig: &pokeapi.Config{
 				Next:     strPtr(pokeapi.LocationAreaURL),
@@ -184,7 +184,7 @@ func TestCommandExplore(t *testing.T) {
 		{
 			steps: []funcStep{
 				{
-					fn: func(ctx *CommandContext, _ []string) error {
+					fn: func(ctx *Context, _ []string) error {
 						return CommandExplore(ctx, []string{"canalave-city-area"})
 					},
 					expectContains: "staryu", // expect one Pokémon known in the area
@@ -195,7 +195,7 @@ func TestCommandExplore(t *testing.T) {
 		{
 			steps: []funcStep{
 				{
-					fn: func(ctx *CommandContext, _ []string) error {
+					fn: func(ctx *Context, _ []string) error {
 						return CommandExplore(ctx, []string{}) // no parameter
 					},
 					expectContains: "",
@@ -206,7 +206,7 @@ func TestCommandExplore(t *testing.T) {
 		{
 			steps: []funcStep{
 				{
-					fn: func(ctx *CommandContext, _ []string) error {
+					fn: func(ctx *Context, _ []string) error {
 						return CommandExplore(ctx, []string{"invalid-area"})
 					},
 					expectContains: "",
@@ -217,7 +217,7 @@ func TestCommandExplore(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		ctx := CommandContext{
+		ctx := Context{
 			Client: pokeapi.NewClient(),
 		}
 
@@ -247,8 +247,9 @@ func TestCommandExplore(t *testing.T) {
 }
 
 func TestCommandCatch(t *testing.T) {
-	ctx := CommandContext{
-		Client: pokeapi.NewClient(),
+	ctx := Context{
+		Pokedex: make(map[string]pokeapi.Pokemon),
+		Client:  pokeapi.NewClient(),
 	}
 
 	cases := []struct {
